@@ -1,8 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
 
-// In a real app, this would be process.env.API_KEY. 
-// For this demo, we assume the environment is set up correctly.
-const apiKey = process.env.API_KEY || ''; 
+// Access API key from Vite environment variables or fallback
+// In Vite, use import.meta.env.VITE_API_KEY, but for compatibility with the provided snippet structure
+// we will check both or allow manual entry in a real app.
+// Note: Never commit real API keys to version control.
+const apiKey = (import.meta as any).env?.VITE_API_KEY || ''; 
 
 let ai: GoogleGenAI | null = null;
 
@@ -13,9 +15,10 @@ if (apiKey) {
 export const analyzeGovData = async (text: string): Promise<{ summary: string; tags: string[]; sensitivity: string }> => {
   if (!ai) {
     // Fallback if no API key is present
+    console.warn("Gemini API key not found. Please set VITE_API_KEY in .env file.");
     return {
-      summary: "AI服务未连接，无法生成摘要。",
-      tags: ["未分类"],
+      summary: "AI服务未连接，请在 .env 文件中配置 VITE_API_KEY 以启用智能分析。",
+      tags: ["未连接"],
       sensitivity: "未知"
     };
   }
