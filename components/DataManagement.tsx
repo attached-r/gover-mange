@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { GovDataRecord, DataStatus, UserRole } from '../types';
-import { mockService } from '../services/mockService';
+import { apiService } from '../services/api';
 import { analyzeGovData } from '../services/geminiService';
 import { Eye, EyeOff, Edit2, Trash2, Bot, Check, AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -20,7 +20,8 @@ const DataManagement: React.FC<DataManagementProps> = ({ currentUser }) => {
 
   const loadData = async () => {
     setLoading(true);
-    const result = await mockService.getData();
+    // Use API Service which tries backend first
+    const result = await apiService.getData();
     setData(result);
     setLoading(false);
   };
@@ -44,7 +45,7 @@ const DataManagement: React.FC<DataManagementProps> = ({ currentUser }) => {
 
   const handleDelete = async (id: string) => {
     if (confirm('确认删除该条数据吗？操作将被记录在审计日志中。')) {
-       await mockService.deleteData(id, currentUser.id);
+       await apiService.deleteData(id, currentUser.id);
        loadData();
     }
   };
@@ -61,6 +62,7 @@ const DataManagement: React.FC<DataManagementProps> = ({ currentUser }) => {
           case DataStatus.PENDING: return 'bg-orange-100 text-orange-700 border-orange-200';
           case DataStatus.CLEANED: return 'bg-blue-100 text-blue-700 border-blue-200';
           case DataStatus.ERROR: return 'bg-red-100 text-red-700 border-red-200';
+          default: return 'bg-slate-100 text-slate-700';
       }
   };
 
@@ -99,6 +101,7 @@ const DataManagement: React.FC<DataManagementProps> = ({ currentUser }) => {
                 <td className="px-6 py-4">
                   <div className="font-medium text-slate-800 truncate max-w-xs" title={record.title}>{record.title}</div>
                   <div className="text-xs text-slate-400 mt-1">{record.sourceName}</div>
+                  <div className="text-xs text-slate-300 truncate max-w-xs">{record.sourceUrl}</div>
                 </td>
                 <td className="px-6 py-4">
                     <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs border border-slate-200">{record.category}</span>
@@ -107,7 +110,7 @@ const DataManagement: React.FC<DataManagementProps> = ({ currentUser }) => {
                   <div className="line-clamp-2 text-slate-500 max-w-sm">
                       {showSensitive[record.id] ? record.content : maskContent(record.content)}
                   </div>
-                  {record.sensitiveInfo.hasSensitiveData && (
+                  {record.sensitiveInfo && record.sensitiveInfo.hasSensitiveData && (
                       <div className="flex items-center gap-1 text-xs text-red-500 mt-1">
                           <AlertCircle size={12} />
                           包含敏感信息: {record.sensitiveInfo.detectedTypes.join(', ')}

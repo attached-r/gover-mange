@@ -107,6 +107,19 @@ class MockService {
     return [...this.data];
   }
 
+  async addData(record: GovDataRecord): Promise<void> {
+    await delay(300);
+    const newRecord = {
+      ...record,
+      id: record.id || Math.random().toString(36).substr(2, 9),
+      sourceName: record.sourceName || '手动采集/导入',
+      status: record.status || DataStatus.PENDING,
+      sensitiveInfo: record.sensitiveInfo || { hasSensitiveData: false, detectedTypes: [] }
+    };
+    this.data.unshift(newRecord);
+    this.addLog('system', 'System', '新增数据', `Data:${newRecord.title}`, '127.0.0.1');
+  }
+
   async updateDataStatus(id: string, status: DataStatus, userId: string): Promise<void> {
     const record = this.data.find(d => d.id === id);
     if (record) {

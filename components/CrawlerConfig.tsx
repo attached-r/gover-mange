@@ -1,18 +1,26 @@
+
 import React, { useState, useEffect } from 'react';
-import { CrawlerTask, CrawlerRule } from '../types';
-import { mockService } from '../services/mockService';
-import { Play, Pause, Plus, Trash2, Settings, Globe, Clock, Code, Save } from 'lucide-react';
+import { CrawlerTask, DataStatus } from '../types';
+import { apiService } from '../services/api';
+import { Play, Pause, Plus, Trash2, Settings, Globe, Clock, Code, Save, Zap, AlertCircle, Database, Check } from 'lucide-react';
+import { useNavigate } from 'react-router-dom'; // Assuming routing usage or just tab switching
 
 const CrawlerConfig: React.FC<{ currentUser: any }> = ({ currentUser }) => {
   const [tasks, setTasks] = useState<CrawlerTask[]>([]);
   const [editingTask, setEditingTask] = useState<CrawlerTask | null>(null);
+  
+  // Test Run State
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     loadTasks();
   }, []);
 
   const loadTasks = async () => {
-    const t = await mockService.getTasks();
+    const t = await apiService.getTasks();
     setTasks(t);
   };
 
@@ -24,15 +32,59 @@ const CrawlerConfig: React.FC<{ currentUser: any }> = ({ currentUser }) => {
           schedule: '0 0 * * *',
           status: 'paused',
           lastRun: '-',
-          rules: [{ field: 'title', selector: '', type: 'css', attribute: 'text' }]
+          rules: [{ field: 'title', selector: 'h1', type: 'css', attribute: 'text' }]
       });
+      setTestResult(null);
+      setSaveSuccess(false);
   };
 
-  const handleSave = async () => {
+  const handleSaveTask = async () => {
       if(editingTask) {
-          await mockService.addTask(editingTask, currentUser.id);
+          await apiService.addTask(editingTask, currentUser.id);
           setEditingTask(null);
           loadTasks();
+      }
+  };
+
+  const handleTestRun = async () => {
+    if (!editingTask || !editingTask.targetUrl) {
+      alert("请输入目标 URL");
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    setSaveSuccess(false);
+    
+    const result = await apiService.testCrawlRule(editingTask.targetUrl, editingTask.rules);
+    
+    setTesting(false);
+    setTestResult(result);
+  };
+
+  const handleImportData = async () => {
+      if (!testResult || !testResult.data) return;
+      setSaving(true);
+      
+      const content = testResult.data.content || JSON.stringify(testResult.data);
+      const title = testResult.data.title || '无标题采集数据';
+      
+      try {
+          await apiService.createData({
+              title: title,
+              sourceUrl: editingTask?.targetUrl || '',
+              content: content,
+              category: '自动采集',
+              status: DataStatus.PENDING,
+              publishDate: new Date().toISOString().split('T')[0],
+              crawlDate: new Date().toLocaleString('zh-CN'),
+          });
+          setSaving(false);
+          setSaveSuccess(true);
+          // Optional: Notify user
+          alert("数据已成功入库！请前往【数据管理】查看。");
+      } catch (e) {
+          setSaving(false);
+          alert("入库失败");
       }
   };
 
@@ -89,73 +141,141 @@ const CrawlerConfig: React.FC<{ currentUser: any }> = ({ currentUser }) => {
                             type="text" 
                             value={editingTask.targetUrl}
                             onChange={e => setEditingTask({...editingTask, targetUrl: e.target.value})}
-                            className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none" 
+                            className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm" 
                             placeholder="https://..."
                         />
                      </div>
                  </div>
              </div>
 
-             <div className="mb-6">
-                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-semibold text-slate-800">提取规则配置</h3>
-                    <button onClick={addRule} className="text-xs flex items-center gap-1 text-blue-600 hover:bg-blue-50 px-2 py-1 rounded">
-                        <Plus size={14} /> 添加规则
-                    </button>
+             <div className="mb-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                 <div className="lg:col-span-2">
+                     <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-semibold text-slate-800">提取规则配置</h3>
+                        <button onClick={addRule} className="text-xs flex items-center gap-1 text-blue-600 hover:bg-blue-50 px-2 py-1 rounded">
+                            <Plus size={14} /> 添加规则
+                        </button>
+                     </div>
+                     <div className="space-y-3 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                         {editingTask.rules.map((rule, idx) => (
+                             <div key={idx} className="flex gap-3 items-center">
+                                 <input 
+                                    placeholder="字段 (如: title)" 
+                                    value={rule.field} 
+                                    onChange={e => {
+                                        const newRules = [...editingTask.rules];
+                                        newRules[idx].field = e.target.value;
+                                        setEditingTask({...editingTask, rules: newRules});
+                                    }}
+                                    className="w-24 text-sm border border-slate-300 rounded p-2"
+                                 />
+                                 <select 
+                                    value={rule.type}
+                                    onChange={e => {
+                                        const newRules = [...editingTask.rules];
+                                        newRules[idx].type = e.target.value as any;
+                                        setEditingTask({...editingTask, rules: newRules});
+                                    }}
+                                    className="w-20 text-sm border border-slate-300 rounded p-2 bg-white"
+                                 >
+                                     <option value="css">CSS</option>
+                                     <option value="xpath">XPath</option>
+                                 </select>
+                                 <input 
+                                    placeholder="选择器 (如: .article-h1)" 
+                                    value={rule.selector} 
+                                    onChange={e => {
+                                        const newRules = [...editingTask.rules];
+                                        newRules[idx].selector = e.target.value;
+                                        setEditingTask({...editingTask, rules: newRules});
+                                    }}
+                                    className="flex-1 text-sm border border-slate-300 rounded p-2 font-mono"
+                                 />
+                                 <button 
+                                    onClick={() => {
+                                         const newRules = editingTask.rules.filter((_, i) => i !== idx);
+                                         setEditingTask({...editingTask, rules: newRules});
+                                    }}
+                                    className="text-red-400 hover:text-red-600 p-2"
+                                 >
+                                     <Trash2 size={16} />
+                                 </button>
+                             </div>
+                         ))}
+                     </div>
                  </div>
-                 <div className="space-y-3 bg-slate-50 p-4 rounded-lg border border-slate-200">
-                     {editingTask.rules.map((rule, idx) => (
-                         <div key={idx} className="flex gap-3 items-center">
-                             <input 
-                                placeholder="字段名 (如: title)" 
-                                value={rule.field} 
-                                onChange={e => {
-                                    const newRules = [...editingTask.rules];
-                                    newRules[idx].field = e.target.value;
-                                    setEditingTask({...editingTask, rules: newRules});
-                                }}
-                                className="w-32 text-sm border border-slate-300 rounded p-2"
-                             />
-                             <select 
-                                value={rule.type}
-                                onChange={e => {
-                                    const newRules = [...editingTask.rules];
-                                    newRules[idx].type = e.target.value as any;
-                                    setEditingTask({...editingTask, rules: newRules});
-                                }}
-                                className="w-24 text-sm border border-slate-300 rounded p-2 bg-white"
-                             >
-                                 <option value="css">CSS</option>
-                                 <option value="xpath">XPath</option>
-                                 <option value="regex">Regex</option>
-                             </select>
-                             <input 
-                                placeholder="选择器 / 表达式" 
-                                value={rule.selector} 
-                                onChange={e => {
-                                    const newRules = [...editingTask.rules];
-                                    newRules[idx].selector = e.target.value;
-                                    setEditingTask({...editingTask, rules: newRules});
-                                }}
-                                className="flex-1 text-sm border border-slate-300 rounded p-2 font-mono"
-                             />
-                             <button 
-                                onClick={() => {
-                                     const newRules = editingTask.rules.filter((_, i) => i !== idx);
-                                     setEditingTask({...editingTask, rules: newRules});
-                                }}
-                                className="text-red-400 hover:text-red-600 p-2"
-                             >
-                                 <Trash2 size={16} />
-                             </button>
-                         </div>
-                     ))}
+
+                 {/* Test Panel */}
+                 <div className="bg-slate-800 rounded-xl p-4 text-slate-200 flex flex-col h-full min-h-[300px]">
+                    <div className="flex justify-between items-center mb-3">
+                        <h4 className="font-semibold text-sm flex items-center gap-2">
+                           <Zap size={14} className="text-yellow-400" /> 规则测试
+                        </h4>
+                        <button 
+                            onClick={handleTestRun}
+                            disabled={testing}
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+                        >
+                            {testing ? '运行中...' : '立即测试'}
+                        </button>
+                    </div>
+                    <div className="flex-1 bg-slate-900 rounded-lg p-3 font-mono text-xs overflow-auto border border-slate-700 relative">
+                        {testing ? (
+                            <div className="animate-pulse space-y-2">
+                                <div className="h-2 bg-slate-700 rounded w-3/4"></div>
+                                <div className="h-2 bg-slate-700 rounded w-1/2"></div>
+                                <div className="h-2 bg-slate-700 rounded w-full"></div>
+                            </div>
+                        ) : testResult ? (
+                            <>
+                                {testResult.status === 'success' ? (
+                                    <>
+                                        <pre className="text-green-400 whitespace-pre-wrap mb-10">
+                                            {JSON.stringify(testResult.data, null, 2)}
+                                        </pre>
+                                        <div className="absolute bottom-2 right-2 left-2">
+                                            {saveSuccess ? (
+                                                 <button disabled className="w-full bg-green-600 text-white py-2 rounded flex items-center justify-center gap-2 text-sm font-medium">
+                                                     <Check size={16} /> 已入库
+                                                 </button>
+                                            ) : (
+                                                <button 
+                                                    onClick={handleImportData}
+                                                    disabled={saving}
+                                                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded flex items-center justify-center gap-2 text-sm font-medium shadow-lg transition-colors"
+                                                >
+                                                    {saving ? <Database className="animate-pulse" size={16} /> : <Database size={16} />}
+                                                    一键入库
+                                                </button>
+                                            )}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="text-red-400">
+                                        <p className="font-bold mb-1">测试失败:</p>
+                                        {testResult.message}
+                                        {testResult.message === '连接后端失败' && (
+                                            <div className="mt-2 text-slate-500 border-t border-slate-700 pt-2">
+                                                提示：请确保已启动 Python 后端。
+                                                <br/>
+                                                <code>cd backend && uvicorn main:app --reload</code>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <div className="text-slate-500 text-center mt-10">
+                                点击“立即测试”以验证规则是否能正确抓取数据。
+                            </div>
+                        )}
+                    </div>
                  </div>
              </div>
 
-             <div className="flex justify-end pt-4">
-                 <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg flex items-center gap-2 font-medium shadow-lg shadow-blue-500/20">
-                     <Save size={18} /> 保存配置
+             <div className="flex justify-end pt-4 border-t border-slate-100">
+                 <button onClick={handleSaveTask} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg flex items-center gap-2 font-medium shadow-lg shadow-blue-500/20">
+                     <Save size={18} /> 保存任务配置
                  </button>
              </div>
          </div>
@@ -184,7 +304,7 @@ const CrawlerConfig: React.FC<{ currentUser: any }> = ({ currentUser }) => {
                             </span>
                         </div>
                         <h3 className="font-bold text-slate-800 mb-1">{task.name}</h3>
-                        <p className="text-xs text-slate-500 truncate mb-4">{task.targetUrl}</p>
+                        <p className="text-xs text-slate-500 truncate mb-4" title={task.targetUrl}>{task.targetUrl}</p>
                         
                         <div className="space-y-2 text-xs text-slate-500 mb-6">
                             <div className="flex items-center gap-2">
@@ -196,7 +316,7 @@ const CrawlerConfig: React.FC<{ currentUser: any }> = ({ currentUser }) => {
                         </div>
 
                         <div className="flex gap-2 pt-4 border-t border-slate-100">
-                            <button className="flex-1 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 rounded border border-slate-200 flex items-center justify-center gap-2">
+                            <button onClick={() => setEditingTask(task)} className="flex-1 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 rounded border border-slate-200 flex items-center justify-center gap-2">
                                 <Settings size={14} /> 配置
                             </button>
                             <button className={`flex-1 py-2 text-sm font-medium rounded text-white flex items-center justify-center gap-2 ${task.status === 'active' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}>
