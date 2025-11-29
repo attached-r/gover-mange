@@ -1,0 +1,5 @@
+{
+  "name": "Copy of GovData Smart Manager",
+  "description": "A comprehensive government data management system featuring crawler configuration, data cleansing, sensitive information masking, and visualization dashboards. Compliant with data security standards.",
+  "requestFramePermissions": []
+}
