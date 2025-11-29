@@ -18,4 +18,4 @@ View your app in AI Studio: https://ai.studio/apps/drive/1lTsIMNPg77cdlmG6SRNuY6
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
-4. ![click here ](https://692a8bbecb9a36584d103557--gov-mange-rj.netlify.app/)
+4. https://692a8bbecb9a36584d103557--gov-mange-rj.netlify.app/
