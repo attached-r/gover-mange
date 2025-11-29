@@ -9,12 +9,12 @@ class ApiService {
 
   async checkBackendHealth() {
     try {
-      await fetch('http://localhost:8000/');
+      await fetch('http://localhost:8000/', { method: 'GET', signal: AbortSignal.timeout(2000) });
       this.useMock = false;
-      console.log('Connected to Python Backend');
+      console.log('✅ Connected to Python Backend');
     } catch (e) {
       this.useMock = true;
-      console.log('Backend not detected, using Mock Data');
+      console.log('⚠️ Backend not detected, using Mock Data');
     }
   }
 
@@ -24,10 +24,10 @@ class ApiService {
       return {
         status: 'success',
         data: {
-          title: '【模拟数据】关于印发2024年数字经济工作要点的通知',
-          content: '这是前端模拟的抓取结果。请启动 Python 后端以进行真实抓取。',
-          date: '2024-03-20',
-          source: '模拟来源'
+          title: '【模拟数据】无法连接后端',
+          content: '请先启动 Python 后端服务 (cd backend && uvicorn main:app --reload) 以使用真实爬虫功能。',
+          date: new Date().toISOString(),
+          source: 'System'
         }
       };
     }
@@ -52,9 +52,8 @@ class ApiService {
       const res = await fetch(`${API_BASE_URL}/data`);
       if (!res.ok) throw new Error('Failed to fetch');
       const remoteData = await res.json();
-      // Combine with mock data for better demo experience
       const mockData = await mockService.getData();
-      // Remote data on top
+      // 合并数据：后端数据优先
       return [...remoteData, ...mockData]; 
     } catch (e) {
       console.warn("Fetch data failed, falling back to mock", e);
@@ -64,8 +63,7 @@ class ApiService {
 
   async createData(data: Partial<GovDataRecord>): Promise<any> {
     if (this.useMock) {
-        // Mock save
-        return mockService.addData(data as GovDataRecord); // Assume mockService has this or we just ignore
+        return mockService.addData(data as GovDataRecord);
     }
 
     const payload = {
@@ -84,18 +82,19 @@ class ApiService {
   }
 
   async deleteData(id: string, uid: string) { 
-      if (this.useMock) return mockService.deleteData(id, uid);
-      
-      // Try to delete from backend, if fails (e.g. 404 because it's a mock id), try mock service
-      try {
-          await fetch(`${API_BASE_URL}/data/${id}`, { method: 'DELETE' });
-      } catch {
-          // ignore
+      // 优先尝试从 mock 删除
+      await mockService.deleteData(id, uid);
+
+      if (!this.useMock) {
+        try {
+            await fetch(`${API_BASE_URL}/data/${id}`, { method: 'DELETE' });
+        } catch {
+            // ignore error
+        }
       }
-      return mockService.deleteData(id, uid); 
   }
 
-  // Tasks, Login, Logs etc. use Mock for now
+  // Tasks, Login, Logs use Mock for simplicity in this demo
   async getTasks() { return mockService.getTasks(); }
   async addTask(task: CrawlerTask, uid: string) { return mockService.addTask(task, uid); }
   async login(u: string) { return mockService.login(u); }
@@ -103,4 +102,5 @@ class ApiService {
 }
 
 export const apiService = new ApiService();
+// 初始化检查
 apiService.checkBackendHealth();
